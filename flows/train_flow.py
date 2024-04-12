@@ -39,7 +39,33 @@ def train_flow(cfg: Dict[str, Any]):
                                                   dvc_checkout=ds_cfg['dvc_checkout'])
 
 
+    # data validation before using
+    report_path = f"files/{ds_cfg['ds_name']}_{ds_cfg['dvc_tag']}_validation.html" # this must be .html
+    validate_data(ds_repo_path, img_ext = 'jpeg', save_path=report_path)
+    
+    mlflow.set_experiment(mlflow_train_cfg["exp_name"])
+    with mlflow.start_run(description=mlflow_train_cfg['exp_desc']) as train_run:
+        log_mlflow_info(logger,train_run)
+        mlflow_run_url = build_and_log_mlflow_url(logger,train_run)
+        
+        mlflow.set_tags(tags=mlflow_train_cfg['exp_tags'])
+        mlflow.log_params(hparams)
+        # for simplicity, I gonna save data validation report along with training task
+        mlflow.log_artifact(report_path)
+        trained_model = train_model(model, model_cfg['classes'], ds_repo_path, annotation_df,
+                           img_size=input_shape, epochs=hparams['epochs'],
+                           batch_size=hparams['batch_size'], init_lr=hparams['init_lr'],
+                           augmenter=AUGMENTER)
+        model_dir, metadata_file_path = save_model(trained_model, model_cfg)
+        model_save_dir, metadata_file_name = upload_model(model_dir=model_dir, 
+                                                      metadata_file_path=metadata_file_path,
+                                                      remote_dir=central_models_dir)        
+            
 
+def start(cfg):
+    train_flow(cfg)
+        
+        
     
 
 

@@ -4,8 +4,8 @@ import pandas as pd
 
 from tasks.model import build_model, save_model, train_model, upload_model
 from tasks.dataset import prepare_dataset, validate_data
-# from tasks.deploy import (build_ref_data, save_and_upload_ref_data,
-#                           build_drift_detectors, save_and_upload_drift_detectors)
+from tasks.deploy import (build_ref_data, save_and_upload_ref_data,
+                          build_drift_detectors, save_and_upload_drift_detectors)
 from tasks.utils.tf_data_utils import AUGMENTER
 from flows.utils import log_mlflow_info, build_and_log_mlflow_url
 from prefect import flow, get_run_logger
@@ -15,6 +15,8 @@ from typing import Dict, Any
 CENTRAL_STORAGE_PATH = os.getenv("CENTRAL_STORAGE_PATH", "/home/Jang/central_storage")
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5050")
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+
+
 
 
 @flow(name='train_flow')
@@ -59,12 +61,28 @@ def train_flow(cfg: Dict[str, Any]):
         model_dir, metadata_file_path = save_model(trained_model, model_cfg)
         model_save_dir, metadata_file_name = upload_model(model_dir=model_dir, 
                                                       metadata_file_path=metadata_file_path,
-                                                      remote_dir=central_models_dir)        
-            
+                                                      remote_dir=central_models_dir)
+        # build and save drift detector for the trained model
+        uae, bbsd = build_drift_detectors(trained_model, model_input_size=input_shape,
+                                          softmax_layer_idx=drift_cfg['bbsd_layer_idx'],
+                                          encoding_dims=drift_cfg['uae_encoding_dims'])
+        save_and_upload_drift_detectors(uae, bbsd, remote_dir=central_models_dir, model_cfg=model_cfg)
+
+        # build and save reference data for drift detection with the trained model
+        ref_data_df = build_ref_data(uae, bbsd, annotation_df, n_sample=drift_cfg['reference_data_n_sample'],
+                       classes=model_cfg['classes'], img_size=input_shape, batch_size=hparams['batch_size'])
+        save_and_upload_ref_data(ref_data_df, central_ref_data_dir, model_cfg) 
+
+    create_link_artifact(
+        key = 'mlflow-train-run',
+        link = mlflow_run_url,
+        description = "Link to MLflow's training run"
+    )
+
+    return model_save_dir, metadata_file_path, metadata_file_name
 
 def start(cfg):
     train_flow(cfg)
-        
         
     
 

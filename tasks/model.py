@@ -44,7 +44,9 @@ def upload_model(model_dir: str, metadata_file_path: str, remote_dir: str):
     logger = get_run_logger()
     model_name = os.path.split(model_dir)[-1]
     metadata_file_name = os.path.split(metadata_file_path)[-1]
-
+    print("model_name:",model_name)
+    print("metadata_file_name:",metadata_file_name)
+    
     shutil.copy2(metadata_file_path, remote_dir)
     
     model_save_dir = os.path.join(remote_dir, model_name)
